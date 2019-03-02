@@ -1,0 +1,86 @@
+"""
+First version of lambda to send "new jobs" to SNS... worked until someone changed all the jobs at once, so I had to try to use DynamoDB
+
+Needed layers:
+  * requests: used arn:aws:lambda:us-east-1:113088814899:layer:Klayers-python37-requests:1
+    Can change the region if necessary
+  * pandas: created layer, uploaded it to s3 (bucket pythonlibs) and created the layer 
+      arn:aws:lambda:us-east-1:079119988851:layer:Pandas:2
+  * numpy: used existing AWS layer
+  
+Used a CloudWatch trigger rate(1 day) to have it run daily
+
+SNS: 
+  * created a topic, NovettaJob
+  * set to deliver to subscribers via e-mail
+  * only subscriber was me
+
+"""
+
+import boto3
+import requests
+import pandas as pd
+from string import Template
+
+def NovettaJobs():
+    url = 'https://boards-api.greenhouse.io/v1/boards/novetta/jobs'
+    textPart = ''
+    # Get data
+    r = requests.get(url)
+    jobs = r.json()
+    
+    # need error checking on r
+    # need to check the status_code
+    #  200 - success
+    #  204 - no data returned
+    #  Others - probably bad
+    
+    # Total number of job postings
+    total = (jobs.get('meta')).get('total')
+    textPart = f'Today, the total number of job postings is {total}.'    
+    
+    # Put the job listings into a data frame
+    joblist = jobs.get('jobs')
+    df = pd.DataFrame.from_records(joblist)  
+    
+    # Filter for all jobs updated 'yesterday'
+    today = pd.to_datetime('today').normalize()   # Today at midnight
+    yesterday = today - pd.Timedelta(days=1)
+    df['updated_at'] = pd.to_datetime(df['updated_at'])
+    #mask = ((df['updated_at'] > yesterday) & (df['updated_at'] < today))        # filter for all jobs updated yesterday
+    mask = (df['updated_at'] > yesterday)         # filter for all jobs updated yesterday
+    filtered = df.loc[mask]                       # ... and now filtered
+    # need to check that there are some results...
+    if len(filtered) != 0:
+        # instead of checking that there are no results, check that there are and then send on to SNS
+        # SNS will be later...
+        # Just assume there are results
+        textPart += f'\nThere have been {len(filtered)} new or updated jobs posted since yesterday.\n'
+        
+        # Sort the jobs, and provide printout
+        sorted = filtered.sort_values(by='updated_at', ascending=False)
+        # Template
+        s = Template("<$url>, $title, $loc")
+        # Print out the jobs
+        for index, row in sorted.iterrows():
+            textPart += f'\n'
+            textPart += s.safe_substitute(url=(row.absolute_url).strip(), 
+                                          title=(row.title).strip(), 
+                                          loc=(row.location['name']).strip())
+    else:
+        textPart = None
+    
+    return textPart
+
+def lambda_handler(event, context):
+    print('loading handler')
+    sns = boto3.client(service_name="sns")
+    topicArn = 'arn:aws:sns:us-east-1:079119988851:NovettaJobs'
+ 
+    sns.publish(
+        TopicArn = topicArn,
+        Subject = "Today's New Jobs",
+        Message =  NovettaJobs()
+    )
+ 
+    return
