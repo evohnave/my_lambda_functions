@@ -6,6 +6,11 @@ Set up table NovettaJobs in DynamoDB in us-east-1
 
 Need to set up an IAM policy to allow the Lambda function to access DynamoDB
 
+Need to add a layer to the Lambda function for the requests library.
+   I used an existing layer for this:
+     arn:aws:lambda:us-east-1:113088814899:layer:Klayers-python37-requests:1
+                   <change region as needed>
+
 Also need to increase the timeout for the Lambda function from the default 3s
 
 fix_kv() fixes the JSON for each job.  DynamoDB does not allow empty values, and '' or "" are
