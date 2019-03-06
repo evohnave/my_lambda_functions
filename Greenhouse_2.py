@@ -107,6 +107,7 @@ def Create_SNS_Text(num_jobs, new_jobs):
     textPart = f'Today, the total number of job postings is {num_jobs}.'
     textPart += f'\nThere have been {new_jobs.__len__()} new or updated jobs posted since yesterday.\n'
     sorted = new_jobs.sort_values(by='id', ascending=False)
+    print(textPart)
     for index, row in sorted.iterrows():
             textPart += f'\n'
             textPart += s.safe_substitute(url=(row.absolute_url).strip(), 
@@ -183,5 +184,7 @@ def lambda_handler(event, context):
         # Write new jobs to DynamoDB
         Write_new_to_DynamoDB(new_jobs, Table)
         print('Wrote to DynamoDB')
+    else:
+        print("No new jobs")
  
     return
