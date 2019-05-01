@@ -1,0 +1,53 @@
+import boto3
+from datetime import datetime
+ 
+def lambda_handler(event, context):
+    """
+    This will shut down ONLY dev-redshift-eav
+    Change cluster_identifier for other clusters
+    No others expected to be running, but they'll stay up if they are
+    """
+ 
+    cluster_identifier = 'dev-redshift-eav'
+    region = 'us-gov-west-1'
+    redshift = boto3.client(service_name = 'redshift'
+                            , region_name = region
+                        )
+ 
+    while True:
+        try:
+            print(f"Attempting to shut down cluster {cluster_identifier}.")
+            snapshot_name = 'dev-' + datetime.today().strftime('%Y-%m-%d-%H-%M')
+            shutdownResponse = redshift.delete_cluster(
+                                ClusterIdentifier = cluster_identifier
+                                , SkipFinalClusterSnapshot = False
+                                , FinalClusterSnapshotIdentifier = snapshot_name
+                            )
+            ret = "Success"
+            break
+ 
+        except redshift.exceptions.ClusterNotFoundFault as e:
+            print("Cluster not running")
+            print(f"\tError type: {type(e)}")
+            print(f"\tArguments: {e.args}")
+            ret = "Cluster Not Running"
+            break
+ 
+        except redshift.exceptions.ClusterSnapshotAlreadyExistsFault as e:
+            # Shouldn't get this exception after adding -hh-mm to snapshot name
+            #   but have here just in case... no break, so should retry to
+            #   delete the cluster with the new snapshot name
+            print("Snapshot Already Exists - will try another")
+            print(f"\tError type: {type(e)}")
+            print(f"\tArguments: {e.args}")
+ 
+        except Exception as e:
+            print("Unknown exception")
+            print(f"\tError type: {type(e)}")
+            print(f"\tArguments: {e.args}")
+            ret = "Unknown Exception"
+            break
+        finally:
+            print("\n")
+ 
+    return ret
